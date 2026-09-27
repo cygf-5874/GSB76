@@ -169,11 +169,18 @@ def _make_table():
 
 
 _UNITS = _make_table()
-_UNITS_FOLDED = {symbol.lower(): unit for symbol, unit in _UNITS.items()}
+
+# 绝对温度单位 -> 同尺度温差单位；温差单位 -> 对应绝对温度单位
+_ABSOLUTE_DELTA = {
+    "K": "delta_degC",
+    "degC": "delta_degC",
+    "degF": "delta_degF",
+}
+_DELTA_ABSOLUTE = {delta: absolute for absolute, delta in _ABSOLUTE_DELTA.items()}
 
 
 def _lookup(symbol):
-    return _UNITS_FOLDED.get(symbol.lower())
+    return _UNITS.get(symbol)
 
 
 def _prefixed(symbol):
@@ -190,10 +197,28 @@ def resolve_symbol(symbol):
     """把一个单位符号（可带 SI 前缀）解析成 :class:`Unit`。"""
     if not symbol:
         raise UnitParseError("空的单位符号")
+    unit = _lookup(symbol)
+    if unit is not None:
+        return unit
     prefixed = _prefixed(symbol)
     if prefixed is not None:
         return prefixed
-    unit = _lookup(symbol)
-    if unit is None:
-        raise UnitParseError("未知单位：%r" % (symbol,))
-    return unit
+    raise UnitParseError("未知单位：%r" % (symbol,))
+
+
+def delta_unit(unit):
+    """返回绝对温度单位同尺度的温差单位；不适用时返回 ``None``。"""
+    if getattr(unit, "kind", None) == ABSOLUTE and unit.dim == TEMPERATURE:
+        symbol = _ABSOLUTE_DELTA.get(unit.symbol)
+        if symbol is not None:
+            return _UNITS[symbol]
+    return None
+
+
+def absolute_unit(unit):
+    """返回温差单位对应的绝对温度单位；不适用时返回 ``None``。"""
+    if getattr(unit, "kind", None) == DELTA:
+        symbol = _DELTA_ABSOLUTE.get(unit.symbol)
+        if symbol is not None:
+            return _UNITS[symbol]
+    return None
