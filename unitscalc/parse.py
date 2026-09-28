@@ -1,18 +1,21 @@
 """量与单位表达式的文本解析。"""
 
 import re
+from decimal import Decimal
+from fractions import Fraction
 
 from .errors import UnitParseError
 from .quantity import Quantity
-from .registry import (DIMENSIONLESS_UNIT, PLAIN, combine_units,
-                       power_unit, resolve_symbol)
+from .registry import (DIMENSIONLESS_UNIT, PLAIN, build_unit, power_unit,
+                       resolve_symbol)
 
 _NUMBER_RE = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
+_SPLIT_RE = re.compile(r"([*/])")
 
 
 def _to_number(text):
     """把数值字面量变成内部的数值表示。"""
-    return float(text)
+    return Fraction(Decimal(text))
 
 
 def _parse_atom(text):
@@ -37,13 +40,23 @@ def _parse_atom(text):
 def _parse_unit_expr(text):
     if not text:
         raise UnitParseError("空的单位表达式")
-    if "/" in text:
-        head, tail = text.split("/", 1)
-        return combine_units(_parse_unit_expr(head), _parse_unit_expr(tail), -1)
-    if "*" in text:
-        head, tail = text.split("*", 1)
-        return combine_units(_parse_unit_expr(head), _parse_unit_expr(tail), 1)
-    return _parse_atom(text)
+    parts = _SPLIT_RE.split(text)
+    if len(parts) % 2 == 0:
+        raise UnitParseError("单位表达式以运算符结尾：%r" % (text,))
+    if len(parts) == 1:
+        return _parse_atom(parts[0])
+    terms = []
+    sign = 1
+    for index, part in enumerate(parts):
+        if index % 2 == 1:
+            sign = -1 if part == "/" else 1
+            continue
+        if not part:
+            raise UnitParseError("单位表达式缺少单位：%r" % (text,))
+        atom = _parse_atom(part)
+        for symbol, exponent, factor, dim in atom.terms:
+            terms.append((symbol, sign * exponent, factor, dim))
+    return build_unit(terms)
 
 
 def parse_unit(text):

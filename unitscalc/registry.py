@@ -6,7 +6,7 @@
 
 from fractions import Fraction
 
-from .errors import UnitParseError
+from .errors import DimensionError, UnitParseError
 
 DIMENSIONLESS = (0, 0, 0, 0, 0, 0, 0)
 
@@ -169,11 +169,10 @@ def _make_table():
 
 
 _UNITS = _make_table()
-_UNITS_FOLDED = {symbol.lower(): unit for symbol, unit in _UNITS.items()}
 
 
 def _lookup(symbol):
-    return _UNITS_FOLDED.get(symbol.lower())
+    return _UNITS.get(symbol)
 
 
 def _prefixed(symbol):
@@ -190,10 +189,26 @@ def resolve_symbol(symbol):
     """把一个单位符号（可带 SI 前缀）解析成 :class:`Unit`。"""
     if not symbol:
         raise UnitParseError("空的单位符号")
+    exact = _lookup(symbol)
+    if exact is not None:
+        return exact
     prefixed = _prefixed(symbol)
     if prefixed is not None:
         return prefixed
-    unit = _lookup(symbol)
-    if unit is None:
-        raise UnitParseError("未知单位：%r" % (symbol,))
-    return unit
+    raise UnitParseError("未知单位：%r" % (symbol,))
+
+
+# 绝对温度单位 -> 同尺度的温差单位
+_DELTA_FOR_ABSOLUTE = {
+    "degC": "delta_degC",
+    "K": "delta_degC",
+    "degF": "delta_degF",
+}
+
+
+def delta_counterpart(unit):
+    """返回与绝对温度单位 ``unit`` 同尺度的温差单位。"""
+    symbol = _DELTA_FOR_ABSOLUTE.get(unit.symbol)
+    if symbol is None:
+        raise DimensionError("没有与 %r 对应的温差单位" % (unit.symbol,))
+    return _UNITS[symbol]
